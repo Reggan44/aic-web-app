@@ -3,12 +3,35 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --navbar-height: 5rem; /* 80px */
+    --safe-top: env(safe-area-inset-top);
+    --safe-bottom: env(safe-area-inset-bottom);
+  }
+
   body {
     background-color: #FAF9F6;
     color: #374151;
     font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport for mobile */
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .min-h-screen-dvh {
+    min-height: 100dvh;
+  }
+  .h-screen-dvh {
+    height: 100dvh;
   }
 }
 

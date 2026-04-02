@@ -5,6 +5,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      screens: {
+        'xs': '480px',
+      },
       colors: {
         primary: 'hsl(var(--primary))',
         secondary: 'hsl(var(--secondary))',

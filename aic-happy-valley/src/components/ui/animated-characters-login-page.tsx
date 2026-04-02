@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -319,6 +321,7 @@ function LoginPage() {
       // - Set user session
     } else {
       setError("Invalid email or password. Please try again.");
+      console.log("❌ Login failed");
     }
 
     setIsLoading(false);
@@ -413,7 +416,7 @@ function LoginPage() {
             >
               {/* Eyes */}
               <div 
-                className="absolute flex gap-6 transition-all duration-700 ease-out"
+                className="absolute flex gap-6 transition-all duration-700 ease-in-out"
                 style={{
                   left: (password.length > 0 && showPassword) ? `${10}px` : isLookingAtEachOther ? `${32}px` : `${26 + blackPos.faceX}px`,
                   top: (password.length > 0 && showPassword) ? `${28}px` : isLookingAtEachOther ? `${12}px` : `${32 + blackPos.faceY}px`,
@@ -553,7 +556,7 @@ function LoginPage() {
                 placeholder="anna@gmail.com"
                 value={email}
                 autoComplete="off"
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 onFocus={() => setIsTyping(true)}
                 onBlur={() => setIsTyping(false)}
                 required
@@ -569,7 +572,7 @@ function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value)}
                   required
                   className="h-12 pr-10 bg-background border-border/60 focus:border-primary"
                 />

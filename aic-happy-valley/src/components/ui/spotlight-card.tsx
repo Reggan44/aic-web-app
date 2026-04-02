@@ -1,5 +1,4 @@
-import React, { useEffect, useRef } from 'react';
-import type { ReactNode } from 'react';
+import React, { useEffect, useRef, type ReactNode } from 'react';
 
 interface GlowCardProps {
   children: ReactNode;
@@ -64,7 +63,7 @@ const GlowCard: React.FC<GlowCardProps> = ({
   };
 
   const getInlineStyles = () => {
-    const baseStyles: Record<string, any> = {
+    const baseStyles: any = {
       '--base': base,
       '--spread': spread,
       '--radius': '14',

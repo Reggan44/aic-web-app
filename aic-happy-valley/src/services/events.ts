@@ -1,24 +1,51 @@
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from './firebase';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import type { EventItem } from '../types';
 
-const EVENTS_COLLECTION = 'events';
+const eventsCollection = collection(db, 'events');
 
 export const getEvents = async (): Promise<EventItem[]> => {
-  const querySnapshot = await getDocs(collection(db, EVENTS_COLLECTION));
-  return querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as EventItem));
+  try {
+    const q = query(eventsCollection, orderBy('date', 'asc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as EventItem[];
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    return [];
+  }
 };
 
 export const addEvent = async (event: Omit<EventItem, 'id'>) => {
-  return await addDoc(collection(db, EVENTS_COLLECTION), event);
+  try {
+    await addDoc(eventsCollection, event);
+    return true;
+  } catch (error) {
+    console.error('Error adding event:', error);
+    throw error;
+  }
 };
 
 export const updateEvent = async (id: string, event: Partial<EventItem>) => {
-  const eventRef = doc(db, EVENTS_COLLECTION, id);
-  return await updateDoc(eventRef, event);
+  try {
+    const eventRef = doc(db, 'events', id);
+    await updateDoc(eventRef, event);
+    return true;
+  } catch (error) {
+    console.error('Error updating event:', error);
+    throw error;
+  }
 };
 
 export const deleteEvent = async (id: string) => {
-  const eventRef = doc(db, EVENTS_COLLECTION, id);
-  return await deleteDoc(eventRef);
+  try {
+    const eventRef = doc(db, 'events', id);
+    await deleteDoc(eventRef);
+    return true;
+  } catch (error) {
+    console.error('Error deleting event:', error);
+    throw error;
+  }
 };

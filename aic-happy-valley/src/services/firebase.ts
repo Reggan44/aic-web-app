@@ -1,17 +1,31 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getMessaging, isSupported } from 'firebase/messaging';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDYNrZVsvcRkiOBCwBKhUhlezhWnEkXBUw",
-  authDomain: "aic-happy-valley.firebaseapp.com",
-  projectId: "aic-happy-valley",
-  storageBucket: "aic-happy-valley.firebasestorage.app",
-  messagingSenderId: "1091541177539",
-  appId: "1:1091541177539:web:b624752f3038ced6363e76",
-  measurementId: "G-CRDWXMYQ8S"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
+
+// Messaging getter with support check
+export const getFirebaseMessaging = async () => {
+  if (typeof window === 'undefined') return null;
+  const supported = await isSupported();
+  if (supported) {
+    return getMessaging(app);
+  }
+  return null;
+};
+
+export default app;

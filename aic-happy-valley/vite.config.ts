@@ -8,7 +8,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      injectRegister: 'auto',
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'icon.png'],
       manifest: {
         name: 'AIC Happy Valley - Church App',
         short_name: 'AIC App',
@@ -16,6 +17,7 @@ export default defineConfig({
         theme_color: '#f59e0b',
         background_color: '#1a1a1a',
         display: 'standalone',
+        orientation: 'portrait',
         icons: [
           {
             src: 'icon.png',
@@ -25,7 +27,8 @@ export default defineConfig({
           {
             src: 'icon.png',
             sizes: '512x512',
-            type: 'image/png'
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }
@@ -40,3 +43,4 @@ export default defineConfig({
     include: ['lucide-react']
   }
 })
+// Triggering re-optimization to resolve dependency caching issues

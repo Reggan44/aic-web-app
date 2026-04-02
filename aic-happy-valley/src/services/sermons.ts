@@ -1,24 +1,51 @@
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from './firebase';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
 import type { Sermon } from '../types';
 
-const SERMONS_COLLECTION = 'sermons';
+const sermonsCollection = collection(db, 'sermons');
 
 export const getSermons = async (): Promise<Sermon[]> => {
-  const querySnapshot = await getDocs(collection(db, SERMONS_COLLECTION));
-  return querySnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Sermon));
+  try {
+    const q = query(sermonsCollection, orderBy('date', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    })) as Sermon[];
+  } catch (error) {
+    console.error('Error fetching sermons:', error);
+    return [];
+  }
 };
 
 export const addSermon = async (sermon: Omit<Sermon, 'id'>) => {
-  return await addDoc(collection(db, SERMONS_COLLECTION), sermon);
+  try {
+    await addDoc(sermonsCollection, sermon);
+    return true;
+  } catch (error) {
+    console.error('Error adding sermon:', error);
+    throw error;
+  }
 };
 
 export const updateSermon = async (id: string, sermon: Partial<Sermon>) => {
-  const sermonRef = doc(db, SERMONS_COLLECTION, id);
-  return await updateDoc(sermonRef, sermon);
+  try {
+    const sermonRef = doc(db, 'sermons', id);
+    await updateDoc(sermonRef, sermon);
+    return true;
+  } catch (error) {
+    console.error('Error updating sermon:', error);
+    throw error;
+  }
 };
 
 export const deleteSermon = async (id: string) => {
-  const sermonRef = doc(db, SERMONS_COLLECTION, id);
-  return await deleteDoc(sermonRef);
+  try {
+    const sermonRef = doc(db, 'sermons', id);
+    await deleteDoc(sermonRef);
+    return true;
+  } catch (error) {
+    console.error('Error deleting sermon:', error);
+    throw error;
+  }
 };
