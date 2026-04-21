@@ -1,0 +1,68 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: Check if the request is from a verified admin
+    function isAdmin() {
+      return request.auth != null &&
+        (exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) ||
+         request.auth.token.email == 'wambuareggan@gmail.com');
+    }
+
+    // ── Public Collections (read-only) ──────────────────────────────────────
+
+    // Sermons: Anyone can read, only admins can create/update/delete
+    match /sermons/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Events: Anyone can read, only admins can manage
+    match /events/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Ministries: Anyone can read, only admins can manage
+    match /ministries/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Leaders / Pastoral Team: Anyone can read, only admins can manage
+    match /leaders/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ── Restricted Collections ──────────────────────────────────────────────
+
+    // Admins list: Only admins can read or manage the admin list
+    match /admins/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // FCM Tokens: Authenticated users can write their own token
+    match /fcm_tokens/{docId} {
+      allow read: if isAdmin();
+      allow write: if true; // Tokens are anonymous, no auth required
+    }
+
+    // Giving / Contact submissions: Write-only for public, admin-read only
+    match /givingSubmissions/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /contact_messages/{docId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ── Default: Deny all other access ──────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
