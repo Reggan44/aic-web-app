@@ -1,396 +1,346 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Users, MessageCircle, MapPin, ShieldCheck, Play, Calendar, LayoutGrid } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ArrowRight, Calendar } from 'lucide-react';
+import { Button } from '../components/elements/Button';
 import { Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
-import { getSermons } from '../services/sermons';
-import { getMinistries } from '../services/ministries';
-import type { Sermon, Ministry } from '../types';
+import { GlowCard } from '@/components/ui/spotlight-card';
+import { getMinistries } from '../features/ministries/api/getMinistries';
+import { CircularGallery, type GalleryItem } from '../components/ui/circular-gallery-og';
+import { useGSAP } from '@gsap/react';
+import { gsap } from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import type { Ministry } from '../types';
+import SEO from '../components/seo/SEO';
+
+gsap.registerPlugin(ScrollTrigger);
+
+const HOME_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'Church',
+  '@id': 'https://aichappyvalley.org/#church',
+  'name': 'AIC Happy Valley',
+  'alternateName': 'Africa Inland Church Happy Valley',
+  'description': 'A Christ-centered, spirit-empowered church family in Thika, Kenya. Join us Sundays at 8:00 AM (English) & 10:30 AM (Kiswahili).',
+  'url': 'https://aichappyvalley.org',
+  'logo': 'https://aichappyvalley.org/logo.png',
+  'image': 'https://aichappyvalley.org/church-drone-view.jpeg',
+  'telephone': '+254700000000',
+  'email': 'info@aichappyvalley.org',
+  'address': {
+    '@type': 'PostalAddress',
+    'streetAddress': 'Happy Valley',
+    'addressLocality': 'Thika',
+    'addressRegion': 'Kiambu County',
+    'postalCode': '01000',
+    'addressCountry': 'KE'
+  },
+  'geo': {
+    '@type': 'GeoCoordinates',
+    'latitude': -1.0395,
+    'longitude': 37.0900
+  },
+  'openingHoursSpecification': [
+    { '@type': 'OpeningHoursSpecification', 'dayOfWeek': 'Sunday', 'opens': '08:00', 'closes': '12:30' },
+    { '@type': 'OpeningHoursSpecification', 'dayOfWeek': 'Wednesday', 'opens': '17:30', 'closes': '19:00' }
+  ],
+  'sameAs': [
+    'https://www.facebook.com/aichappyvalley',
+    'https://www.youtube.com/@aichappyvalley'
+  ],
+  'hasMap': 'https://maps.google.com/?q=AIC+Happy+Valley+Thika+Kenya',
+  'currenciesAccepted': 'KES',
+  'paymentAccepted': 'Cash, M-PESA',
+  'priceRange': 'Free'
+};
+
 
 const Home = () => {
-  const [latestSermon, setLatestSermon] = useState<Sermon | null>(null);
-  const [ministries, setMinistries] = useState<Ministry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMinistries, setLoadingMinistries] = useState(true);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [sermonData, ministryData] = await Promise.all([
-          getSermons(),
-          getMinistries()
-        ]);
-        
-        if (sermonData.length > 0) setLatestSermon(sermonData[0]);
-        setMinistries(ministryData.slice(0, 4));
-      } catch (error) {
-        console.error("Error fetching homepage data:", error);
-      } finally {
-        setLoading(false);
-        setLoadingMinistries(false);
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.15
       }
-    };
-    fetchData();
-  }, []);
-
-  const getEmbedUrl = (url: string) => {
-    try {
-      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-      const match = url.match(regExp);
-      const videoId = (match && match[2].length === 11) ? match[2] : null;
-      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-    } catch (e) {
-      return url;
     }
   };
 
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: {
+        duration: 0.8,
+        ease: 'easeOut'
+      }
+    }
+  };
+
+  const [ministries, setMinistries] = useState<Ministry[]>([]);
+
+  useEffect(() => {
+    const fetchMin = async () => {
+      try {
+        const data = await getMinistries(5); // Get top 5 for "Featured"
+        setMinistries(data);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    fetchMin();
+  }, []);
+
+  // background light effects logic
+  const bgRef = useRef<HTMLDivElement>(null);
+  useGSAP(() => {
+    if (!bgRef.current) return;
+    
+    gsap.fromTo(".bg-glow-1", 
+      { x: -100, opacity: 0 },
+      { 
+        x: 100, 
+        opacity: 0.3,
+        scrollTrigger: {
+          trigger: bgRef.current,
+          start: "top bottom",
+          end: "bottom top",
+          scrub: 2
+        }
+      }
+    );
+    
+    gsap.fromTo(".bg-glow-2", 
+      { x: 100, opacity: 0 },
+      { 
+        x: -100, 
+        opacity: 0.2,
+        scrollTrigger: {
+          trigger: bgRef.current,
+          start: "top bottom",
+          end: "bottom top",
+          scrub: 1.5
+        }
+      }
+    );
+  }, { scope: bgRef });
+
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground font-sans">
-      <Helmet>
-        <title>AIC Happy Valley - Growing Deeper, Living Stronger | Thika Church</title>
-        <meta name="description" content="African Inland Church Happy Valley in Thika, Kenya. A Christ-centered, spirit-empowered church family where we grow deeper in Christ and live stronger in faith. Join our Sunday services at 8:00 AM & 10:30 AM." />
-        <meta name="keywords" content="AIC Happy Valley Vision, Growing Deeper Living Stronger, Church in Thika, Thika Christian Church, Nairobi Metropolitan Churches, African Inland Church Kenya" />
-        <link rel="canonical" href="https://aic-happy-valley.web.app/" />
-        <script type="application/ld+json">
-          {`
-            {
-              "@context": "https://schema.org",
-              "@type": "Church",
-              "name": "AIC Happy Valley",
-              "url": "https://aic-happy-valley.web.app/",
-              "logo": "https://aic-happy-valley.web.app/logo.png",
-              "image": "https://aic-happy-valley.web.app/hero-bg.jpg",
-              "description": "AIC Happy Valley: A Christ-centered, spirit-empowered church family where lives are deeply rooted in the word and transformed for kingdom impact.",
-              "address": {
-                "@type": "PostalAddress",
-                "streetAddress": "Happy Valley Area, Garissa Road",
-                "addressLocality": "Thika",
-                "addressRegion": "Kiambu",
-                "addressCountry": "KE"
-              },
-              "geo": {
-                "@type": "GeoCoordinates",
-                "latitude": -1.0424,
-                "longitude": 37.1085
-              },
-              "openingHoursSpecification": [
-                {
-                  "@type": "OpeningHoursSpecification",
-                  "dayOfWeek": "Sunday",
-                  "opens": "08:00",
-                  "closes": "13:00"
-                }
-              ],
-              "sameAs": [
-                "https://facebook.com/aichappyvalley",
-                "https://youtube.com/aichappyvalley"
-              ]
-            }
-          `}
-        </script>
-      </Helmet>
+    <div className="flex flex-col min-h-screen bg-background text-foreground font-sans selection:bg-brand-sage/30">
+      <SEO
+        title="Welcome to AIC Happy Valley"
+        description="AIC Happy Valley is a Christ-centered, spirit-empowered church family in Thika, Kenya. Join us Sundays at 8:00 AM (English) & 10:30 AM (Kiswahili). Growing Deeper, Living Stronger."
+        url="/"
+        image="/church-drone-view.jpeg"
+        keywords="church Thika Kenya, Sunday service Happy Valley, Christian worship Thika, AIC church"
+        schema={HOME_SCHEMA}
+      />
+      
+      {/* 1. PEACEFUL HERO SECTION WITH VIDEO BACKGROUND */}
 
+      <section className="relative min-h-[95vh] flex items-center justify-center pt-32 px-4 overflow-hidden bg-brand-cream">
+        {/* Background Video */}
+        <div className="absolute inset-0 z-0">
+          <video 
+            autoPlay 
+            loop 
+            muted 
+            playsInline 
+            className="w-full h-full object-cover opacity-60 mix-blend-multiply"
+          >
+            <source src="/hero-video.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute inset-0 bg-gradient-to-b from-brand-cream/80 via-transparent to-brand-cream"></div>
+        </div>
 
-      {/* 1. FULL-SCREEN VIDEO HERO — no text, just the video */}
-      <section className="relative min-h-[70vh] md:min-h-screen-dvh overflow-hidden bg-brand-darkGrey">
-        <video
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover lg:object-center opacity-80"
+        {/* Subtle Decorative Background Elements */}
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 md:w-96 md:h-96 bg-brand-sage/10 rounded-full blur-[80px] md:blur-[100px] animate-pulse opacity-50 md:opacity-100"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 md:w-80 md:h-80 bg-brand-sky/10 rounded-full blur-[80px] md:blur-[100px] animate-pulse opacity-50 md:opacity-100" style={{ animationDelay: '2s' }}></div>
+        
+        <motion.div 
+          className="max-w-4xl mx-auto text-center relative z-10"
+          initial="hidden"
+          animate="visible"
+          variants={containerVariants}
         >
-          <source src="/hero-video.mp4" type="video/mp4" />
-        </video>
-        {/* Subtle gradient at bottom so next section blends nicely */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/60" />
+          <motion.span 
+            variants={itemVariants}
+            className="inline-block px-4 py-1.5 bg-brand-sage/10 text-brand-grey text-[13px] font-semibold rounded-full uppercase tracking-[0.2em] mb-8 border border-brand-sage/20"
+          >
+            AIC Happy Valley
+          </motion.span>
+          
+          <motion.h1 
+            variants={itemVariants}
+            className="text-4xl sm:text-7xl lg:text-8xl font-black leading-[1.2] sm:leading-[1.1] tracking-tight mb-8 text-brand-grey"
+          >
+            Growing <span className="text-brand-sage italic">Deeper</span>,<br />
+            Living <span className="text-brand-gold italic">Stronger</span>.
+          </motion.h1>
+          
+          <motion.p 
+            variants={itemVariants}
+            className="text-lg sm:text-2xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed font-medium"
+          >
+            “You are welcome here.” Experience a Christ-centered family in the heart of Happy Valley. Join us this Sunday.
+          </motion.p>
+          
+          <motion.div 
+            variants={itemVariants}
+            className="flex flex-col sm:flex-row items-center justify-center gap-6"
+          >
+            <Link to="/contact">
+              <Button size="lg" className="rounded-full px-10 py-8 text-lg font-bold bg-brand-sage hover:scale-105 transition-all text-brand-grey shadow-lg shadow-brand-sage/20 border-none group">
+                Plan Your Visit
+                <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </Link>
+            <Link to="/sermons">
+              <Button variant="outline" size="lg" className="rounded-full px-10 py-8 text-lg font-bold border-brand-sage/30 text-brand-grey hover:bg-brand-sage/5 hover:border-brand-sage transition-all">
+                Watch Sermons
+              </Button>
+            </Link>
+          </motion.div>
 
-        {/* Minimal overlay — pinned to the far right */}
-        <div className="absolute inset-x-0 bottom-6 xs:bottom-10 z-20">
-          <div className="max-w-7xl mx-auto px-4 xs:px-6 md:px-12 flex flex-col md:flex-row-reverse md:items-end justify-between gap-6 md:gap-8">
+          <motion.div 
+            variants={itemVariants} 
+            className="mt-16 flex flex-wrap justify-center gap-8 text-sm font-bold text-muted-foreground/80 tracking-wide uppercase"
+          >
+            <div className="flex items-center gap-2">
+              <Calendar size={18} className="text-brand-sage" />
+              Sundays @ 8:00 & 10:30 AM
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-brand-gold"></span>
+              Thika, Happy Valley
+            </div>
+          </motion.div>
+        </motion.div>
+      </section>
+
+      {/* 2. CALMING MISSION SECTION (Beige Background) */}
+      <section className="py-32 bg-brand-beige/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
             <motion.div 
-               initial={{ opacity: 0, y: 30 }}
-               animate={{ opacity: 1, y: 0 }}
-               transition={{ delay: 0.5, duration: 0.8 }}
-               className="w-full xs:max-w-xs bg-white/10 backdrop-blur-lg p-5 xs:p-6 rounded-[1.5rem] xs:rounded-[2rem] border border-white/20 shadow-[0_20px_50px_rgba(0,0,0,0.3)] relative overflow-hidden group mx-auto md:mx-0"
+              initial={{ opacity: 0, x: -30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8 }}
+              className="space-y-8"
             >
-              <div className="absolute top-0 right-0 w-20 h-20 bg-brand-gold/10 rounded-full blur-2xl -z-0 group-hover:bg-brand-gold/20 transition-all duration-700" />
-              
-              <div className="flex items-center gap-2 mb-2">
-                <div className="px-2 py-0.5 bg-brand-gold text-brand-darkGrey rounded-full flex items-center justify-center text-[7px] font-black uppercase tracking-widest shadow-lg">
-                  Vision
-                </div>
-                <span className="text-white/60 font-black uppercase tracking-widest text-[7px]">Col. 2:7</span>
-              </div>
-              
-              <h1 className="text-white text-2xl xs:text-3xl font-black mb-2 tracking-tighter leading-[0.85]">
-                Growing <span className="text-brand-gold italic">Deeper</span>,<br />
-                Living <span className="text-brand-sage italic">Stronger</span>.
-              </h1>
-              
-              <p className="text-white/80 font-medium mb-3 leading-relaxed text-[10px] italic">
-                "Rooted and built up in Him..."
-              </p>
-
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="bg-white/5 rounded-lg p-2 border border-white/10">
-                  <p className="text-[8px] font-black text-brand-gold uppercase tracking-widest leading-none mb-1">Morning</p>
-                  <p className="text-white font-bold text-xs">8:00 AM</p>
-                </div>
-                <div className="bg-white/5 rounded-lg p-2 border border-white/10">
-                  <p className="text-[8px] font-black text-brand-sage uppercase tracking-widest leading-none mb-1">Mid-Day</p>
-                  <p className="text-white font-bold text-xs">10:30 AM</p>
-                </div>
-              </div>
-
-              <Link to="/contact">
-                <Button className="w-full bg-white text-brand-darkGrey hover:bg-brand-sage hover:text-white font-black h-12 rounded-lg transition-all shadow-xl text-xs group/btn">
-                  Plan Your Visit
-                  <ArrowRight className="ml-1.5 group-hover/btn:translate-x-1 transition-transform" size={14} />
-                </Button>
-              </Link>
-            </motion.div>
-
-            <motion.div
-               initial={{ opacity: 0, y: 20 }}
-               animate={{ opacity: 1, y: 0 }}
-               transition={{ delay: 1, duration: 0.8 }}
-               className="flex items-center gap-4 text-white/60 mb-6 md:mb-0 justify-center md:justify-start"
-            >
-              <div className="w-12 h-[2px] bg-white/20"></div>
-              <span className="text-[10px] font-black uppercase tracking-[0.3em]">Scroll To Explore</span>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* 2. DYNAMIC LATEST SERMON SECTION */}
-      <section className="py-16 md:py-32 bg-brand-cream relative">
-        <div className="max-w-7xl mx-auto px-4 xs:px-6">
-          {!loading && latestSermon ? (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-20 items-center">
-              {/* Text Side */}
-              <motion.div 
-                initial={{ opacity: 0, x: -30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                className="lg:col-span-5"
-              >
-                <span className="inline-block px-4 py-1.5 bg-brand-sage/10 text-brand-sage text-[10px] font-bold rounded-full uppercase tracking-[0.2em] mb-6 border border-brand-sage/20">
-                  Must Watch
-                </span>
-                <h2 className="text-4xl xs:text-5xl md:text-6xl font-black text-brand-darkGrey leading-[0.9] tracking-tighter mb-8">
-                   Watch Our <span className="text-brand-sage italic">Latest Sermon</span>.
-                </h2>
-                
-                <div className="bg-white/50 backdrop-blur-sm border border-brand-sage/10 rounded-3xl p-6 xs:p-8 mb-10 shadow-xl shadow-brand-darkGrey/5">
-                   <div className="flex items-center gap-3 mb-4 text-brand-sage font-black text-xs uppercase tracking-widest">
-                     <Calendar size={14} />
-                     {new Date(latestSermon.date).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
-                   </div>
-                   <h3 className="text-2xl xs:text-3xl font-black text-brand-darkGrey mb-4 tracking-tight leading-tight">
-                     {latestSermon.title}
-                   </h3>
-                   <p className="text-brand-grey text-base xs:text-lg leading-relaxed font-medium line-clamp-3 italic">
-                     "{latestSermon.description}"
-                   </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-6">
-                  <Link to="/sermons">
-                    <Button className="bg-brand-darkGrey text-white hover:bg-brand-sage hover:text-brand-darkGrey px-10 h-16 rounded-full font-black text-lg transition-all shadow-xl group/btn">
-                      Explore Archive
-                      <ArrowRight className="ml-2 group-hover/btn:translate-x-1 transition-transform" size={20} />
-                    </Button>
-                  </Link>
-                </div>
-              </motion.div>
-
-              {/* Video Side */}
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                className="lg:col-span-7"
-              >
-                <div className="relative group overflow-hidden">
-                   {/* Main Video Card */}
-                   <div className="relative aspect-video rounded-[2.5rem] overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.15)] border-[10px] border-white/50 bg-brand-darkGrey">
-                      <iframe
-                        src={getEmbedUrl(latestSermon.videoUrl)}
-                        title={latestSermon.title}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="absolute inset-0 w-full h-full"
-                      />
-                   </div>
-                   
-                   {/* Decorative elements */}
-                 </div>
-               </motion.div>
-             </div>
-          ) : !loading && !latestSermon ? (
-             <div className="text-center py-20 bg-white/50 rounded-[3rem] border-2 border-dashed border-brand-sage/20">
-                <Play className="size-16 text-brand-sage/20 mx-auto mb-6" />
-                <h3 className="text-2xl font-black text-brand-darkGrey/40 uppercase tracking-tighter">Sermon Feed Offline</h3>
-                <p className="text-brand-grey font-medium mt-2 italic">Connect with us on Sunday for a fresh Word.</p>
-             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-32 space-y-4">
-              <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-brand-sage"></div>
-              <p className="text-brand-sage font-black uppercase tracking-widest text-[10px]">Updating Fresh Content...</p>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* 3. WELCOME SECTION */}
-      <section className="py-16 md:py-32 bg-white overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 xs:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-24 items-center">
-            <div className="relative">
-              <span className="inline-block px-4 py-1.5 bg-brand-sage/10 text-brand-sage text-[10px] font-bold rounded-full uppercase tracking-[0.2em] mb-6 border border-brand-sage/20">
-                Our Shepherd
-              </span>
-              <h2 className="text-3xl xs:text-5xl md:text-7xl font-black text-brand-darkGrey leading-[0.85] tracking-tighter mb-8">
-                Planted In Christ. <span className="text-brand-sage italic">Bearing Fruit</span> for His Glory.
+              <h2 className="text-4xl md:text-5xl font-black text-brand-grey leading-tight tracking-tight">
+                A Place to Belong and Be <span className="text-brand-sage">Transformed</span>.
               </h2>
-              <p className="text-lg xs:text-xl text-brand-grey leading-relaxed mb-10 font-medium">
-                AIC Happy Valley exists to be a thriving, Christ-centered church family where lives are deeply rooted in the Word, strengthened by faith, and transformed for kingdom impact.
+              <p className="text-lg text-muted-foreground leading-relaxed">
+                At AIC Happy Valley, we believe everyone has a seat at the table. Our mission is to know Christ and make Him known, fostering a community where faith finds practical expression in daily life.
               </p>
-              <div className="flex flex-col sm:flex-row gap-6">
-                <Link to="/about">
-                  <Button className="bg-brand-sage text-brand-darkGrey hover:bg-brand-darkGrey hover:text-white px-8 xs:px-10 h-16 rounded-full font-black text-lg transition-all shadow-xl shadow-brand-sage/20">
-                    Meet Our Pastors
-                  </Button>
-                </Link>
-                <div className="flex items-center gap-4 px-6 border-l-2 border-brand-sage/20">
-                  <div className="w-12 h-12 bg-brand-cream rounded-full flex items-center justify-center">
-                    <MessageCircle className="text-brand-sage" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest leading-none mb-1">Need Prayer?</p>
-                    <Link to="/contact" className="text-brand-darkGrey font-black hover:text-brand-sage transition-colors">Talk To Us</Link>
-                  </div>
+              <div className="grid grid-cols-2 gap-8 pt-4">
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-sage/20 flex items-center justify-center text-brand-grey font-bold">1</div>
+                  <h4 className="font-bold">Bible Based</h4>
+                  <p className="text-sm text-muted-foreground">Transformative teaching grounded in the Word of God.</p>
+                </div>
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-sky/20 flex items-center justify-center text-brand-grey font-bold">2</div>
+                  <h4 className="font-bold">Family First</h4>
+                  <p className="text-sm text-muted-foreground">A multi-generational home for all ages and backgrounds.</p>
                 </div>
               </div>
-            </div>
+            </motion.div>
             
-            <div className="relative mt-8 lg:mt-0">
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                className="relative z-10 rounded-[2rem] xs:rounded-[3rem] overflow-hidden shadow-2xl border-[8px] xs:border-[12px] border-brand-cream/50 aspect-square"
-              >
-                <img src="/church-drone-view.jpeg" alt="Church Drone View" className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000" />
-              </motion.div>
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[110%] border-2 border-brand-sage/10 rounded-full -z-0"></div>
-              <div className="absolute -bottom-6 -right-6 xs:-bottom-10 xs:-right-10 w-32 h-32 xs:w-40 xs:h-40 bg-brand-gold rounded-full -z-0 blur-3xl opacity-20"></div>
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              className="relative aspect-square rounded-[3rem] overflow-hidden shadow-2xl shadow-brand-grey/5"
+            >
+              <img
+                src="/church-drone-view.jpeg"
+                alt="AIC Happy Valley Church Community"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-brand-sage/10 mix-blend-overlay"></div>
+            </motion.div>
           </div>
         </div>
       </section>
 
-      {/* 4. MINISTRIES PREVIEW SECTION */}
-      <section className="py-16 md:py-32 bg-brand-darkGrey text-white selection:bg-brand-sage selection:text-white relative">
-        <div className="max-w-7xl mx-auto px-4 xs:px-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 md:mb-16 gap-8 text-center md:text-left">
-            <div className="max-w-2xl mx-auto md:mx-0 relative">
-              <span className="text-brand-sage font-black uppercase tracking-[0.3em] text-[10px] mb-4 block">Our Impact</span>
-              <h2 className="text-4xl xs:text-5xl md:text-7xl font-black tracking-tighter leading-none mb-6">
-                 Vibrant <span className="text-brand-sage italic underline decoration-brand-sage/30 underline-offset-8">Ministries</span>
-              </h2>
-              <p className="text-white/60 text-base xs:text-lg font-medium leading-relaxed">
-                 Explore the various ministry areas at AIC Happy Valley where we grow together, serve our community, and impact lives for Christ.
-              </p>
-            </div>
-            <Link to="/ministries" className="flex items-center gap-3 group mx-auto md:mx-0">
-              <span className="text-base xs:text-lg font-black group-hover:text-brand-sage transition-colors">See All Ministries</span>
-              <div className="w-10 h-10 xs:w-12 xs:h-12 bg-white/10 rounded-full flex items-center justify-center group-hover:bg-brand-sage group-hover:text-brand-darkGrey transition-all">
-                <ArrowRight size={20} />
-              </div>
+      {/* 3. FEATURED MINISTRIES EXPLORER (Cream Background with Background Effects) */}
+      <section ref={bgRef} className="py-32 bg-background relative overflow-hidden">
+        {/* Decorative Background Effects */}
+        <div className="bg-glow-1 absolute top-1/4 left-1/4 w-96 h-96 bg-brand-sage/20 rounded-full blur-[120px] pointer-events-none z-0"></div>
+        <div className="bg-glow-2 absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-brand-sky/10 rounded-full blur-[150px] pointer-events-none z-0"></div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center mb-12 space-y-4">
+            <motion.span 
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-[10px] font-black tracking-[0.4em] text-brand-sage uppercase block"
+            >
+              Discover Our Life Together
+            </motion.span>
+            <h2 className="text-4xl md:text-7xl font-black text-brand-grey tracking-tighter uppercase italic">
+              Featured <span className="text-brand-sage not-italic">Fellowships</span>
+            </h2>
+            <p className="text-muted-foreground max-w-2xl mx-auto font-medium">
+              A glimpse into our vibrant community. From the youngest to the elders, there is a place for you to belong.
+            </p>
+          </div>
+          
+          <div className="relative h-[500px] md:h-[700px] w-full mt-12">
+            <CircularGallery
+              items={ministries.map(m => ({
+                id: m.id,
+                image: m.image,
+                text: m.name
+              }))}
+              bend={3}
+              borderRadius={0.05}
+              autoScrollSpeed={0.01}
+              resumeDelay={2000} // Matches user's 2-second requirement
+              scrollEase={0.05}
+            />
+          </div>
+
+          <div className="mt-16 text-center">
+            <Link to="/ministries">
+              <Button variant="ghost" className="rounded-full px-12 py-8 text-lg font-black border-2 border-brand-sage/20 text-brand-grey hover:bg-brand-sage/5 hover:text-brand-sage hover:border-brand-sage transition-all group uppercase tracking-tighter">
+                View All Ministries 
+                <ArrowRight className="ml-3 group-hover:translate-x-2 transition-transform" size={24} />
+              </Button>
             </Link>
           </div>
-
-          {loadingMinistries ? (
-            <div className="flex justify-center py-20">
-               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-brand-sage"></div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
-              {ministries.map((ministry, i) => (
-                <motion.div
-                  key={ministry.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="group relative h-[300px] xs:h-[350px] rounded-[2rem] overflow-hidden cursor-pointer"
-                >
-                  <Link to={`/ministries`}>
-                    <img src={ministry.image} alt={ministry.name} className="absolute inset-0 w-full h-full object-cover grayscale transition-all duration-1000 group-hover:grayscale-0 group-hover:scale-110" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-brand-darkGrey/90 via-brand-darkGrey/20 to-transparent" />
-                    
-                    <div className="absolute inset-0 p-8 flex flex-col justify-end">
-                      <div className="w-10 h-10 bg-brand-sage/20 backdrop-blur-md rounded-xl flex items-center justify-center mb-4 border border-white/10 group-hover:bg-brand-sage group-hover:text-brand-darkGrey transition-all">
-                        <LayoutGrid size={20} />
-                      </div>
-                      <h3 className="text-xl xs:text-2xl font-black mb-2 tracking-tight">{ministry.name}</h3>
-                      <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest group-hover:text-brand-sage transition-colors">Explore Ministry</p>
-                    </div>
-                  </Link>
-                </motion.div>
-              ))}
-              
-              {ministries.length === 0 && (
-                <div className="col-span-full py-20 text-center bg-white/5 rounded-[2.5rem] border border-white/10">
-                   <Users className="size-16 text-white/5 mx-auto mb-4" />
-                   <p className="text-white/40 font-black tracking-widest uppercase text-sm">Stay Tuned For New Ministries</p>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </section>
 
-      {/* 5. FINAL CTAs */}
-      <section className="py-24 md:py-48 bg-brand-beige relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 xs:px-6 relative z-10">
-          <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl xs:text-4xl md:text-6xl font-black text-brand-darkGrey leading-[1.1] mb-12">
-              Ready To <span className="text-brand-sage italic">Join</span> Our Growing Family?
-            </h2>
-            <div className="flex flex-col xs:flex-row justify-center gap-4 xs:gap-6 px-4">
-              <Link to="/contact" className="w-full xs:w-auto">
-                <Button className="w-full h-16 xs:h-20 px-8 xs:px-12 bg-brand-darkGrey text-white hover:bg-brand-sage hover:text-brand-darkGrey rounded-[1.5rem] xs:rounded-[2.5rem] text-lg xs:text-xl font-black transition-all shadow-2xl">
-                  Connect With Us
-                </Button>
-              </Link>
-              <Link to="/giving" className="w-full xs:w-auto">
-                <Button variant="outline" className="w-full h-16 xs:h-20 px-8 xs:px-12 border-2 border-brand-sage text-brand-sage hover:bg-brand-sage hover:text-white rounded-[1.5rem] xs:rounded-[2.5rem] text-lg xs:text-xl font-black transition-all">
-                  Support The Ministry
-                </Button>
-              </Link>
-            </div>
-            
-            <div className="mt-16 md:mt-24 flex items-center justify-center gap-8 md:gap-12 grayscale opacity-40">
-               <div className="flex flex-col items-center">
-                 <MapPin className="text-brand-sage mb-2" size={20} />
-                 <span className="text-[8px] xs:text-[10px] font-black uppercase tracking-[0.2em] xs:tracking-[0.3em]">Thika, Kenya</span>
-               </div>
-               <div className="w-[1px] h-10 bg-brand-sage/20"></div>
-               <div className="flex flex-col items-center">
-                 <ShieldCheck className="text-brand-sage mb-2" size={20} />
-                 <span className="text-[8px] xs:text-[10px] font-black uppercase tracking-[0.2em] xs:tracking-[0.3em]">Built On Faith</span>
-               </div>
-            </div>
+      {/* 4. WELCOMING CALL TO ACTION (Beige Background) */}
+      <section className="py-32 bg-brand-beige">
+        <div className="max-w-5xl mx-auto px-4 text-center space-y-12">
+          <h2 className="text-4xl md:text-6xl font-black text-brand-grey leading-tight">
+            We'd Love to <span className="text-brand-sage">Meet You</span>.
+          </h2>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            Whether you're just starting your spiritual journey or looking for a church home, we're here for you.
+          </p>
+          <div className="flex flex-wrap justify-center gap-6">
+            <Link to="/contact">
+              <Button size="lg" className="rounded-full px-12 py-8 text-xl font-bold bg-brand-grey text-white hover:bg-brand-grey/90 shadow-xl shadow-brand-grey/10 border-none outline-none">
+                Contact Us
+              </Button>
+            </Link>
+            <Link to="/about">
+              <Button size="lg" variant="outline" className="rounded-full px-12 py-8 text-xl font-bold border-brand-grey/20 text-brand-grey hover:bg-brand-grey/5">
+                Learn More
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
     </div>
   );
-}
+};
 
 export default Home;

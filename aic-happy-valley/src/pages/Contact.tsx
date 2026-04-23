@@ -1,309 +1,332 @@
-import { motion } from 'framer-motion';
-import { MapPin, Mail, Phone, Clock, Send, CheckCircle2, ShieldAlert, ShieldCheck, ExternalLink } from 'lucide-react';
-import React, { useState, useCallback } from 'react';
-import { sendMessage } from '../services/contact';
-import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
-import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
-import { Helmet } from 'react-helmet-async';
-import { contactSchema } from '../lib/validations';
-import { z } from 'zod';
+import React, { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Mail, Phone, MapPin, Send, MessageSquare, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import ReCAPTCHA from 'react-google-recaptcha';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { Button } from '../components/elements/Button';
+import { Input } from '../components/elements/Input';
+import { Label } from '../components/elements/Label';
+import { checkRateLimit, recordSubmission } from '../utils/validation';
+import SEO from '../components/seo/SEO';
 
-
-const mapContainerStyle = {
-  width: '100%',
-  height: '100%',
-};
-
-const center = {
-  lat: -1.042358, 
-  lng: 37.108502,
-};
-
-const options = {
-  disableDefaultUI: true,
-  zoomControl: true,
-  styles: [
+const CONTACT_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@graph': [
     {
-      "featureType": "all",
-      "elementType": "labels.text.fill",
-      "stylers": [{"saturation": 36}, {"color": "#333333"}, {"lightness": 40}]
+      '@type': 'ContactPage',
+      '@id': 'https://aichappyvalley.org/contact#webpage',
+      'url': 'https://aichappyvalley.org/contact',
+      'name': 'Contact AIC Happy Valley',
+      'description': 'Get in touch with AIC Happy Valley Church in Thika, Kenya. Visit us Sundays or send a message.',
+      'isPartOf': { '@id': 'https://aichappyvalley.org/#church' },
+      'breadcrumb': {
+        '@type': 'BreadcrumbList',
+        'itemListElement': [
+          { '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': 'https://aichappyvalley.org/' },
+          { '@type': 'ListItem', 'position': 2, 'name': 'Contact', 'item': 'https://aichappyvalley.org/contact' }
+        ]
+      }
     },
     {
-      "featureType": "all",
-      "elementType": "labels.text.stroke",
-      "stylers": [{"visibility": "on"}, {"color": "#ffffff"}, {"lightness": 16}]
-    },
-    {
-      "featureType": "all",
-      "elementType": "labels.icon",
-      "stylers": [{"visibility": "off"}]
-    },
-    {
-      "featureType": "administrative",
-      "elementType": "geometry.fill",
-      "stylers": [{"color": "#fefefe"}, {"lightness": 20}]
+      '@type': 'LocalBusiness',
+      '@id': 'https://aichappyvalley.org/#church',
+      'name': 'AIC Happy Valley',
+      'image': 'https://aichappyvalley.org/church-compound-view.jpeg',
+      'telephone': '+254700000000',
+      'email': 'info@aichappyvalley.org',
+      'url': 'https://aichappyvalley.org',
+      'address': {
+        '@type': 'PostalAddress',
+        'streetAddress': 'Happy Valley',
+        'addressLocality': 'Thika',
+        'addressRegion': 'Kiambu',
+        'postalCode': '01000',
+        'addressCountry': 'KE'
+      },
+      'geo': {
+        '@type': 'GeoCoordinates',
+        'latitude': -1.0395,
+        'longitude': 37.0900
+      },
+      'openingHoursSpecification': [
+        { '@type': 'OpeningHoursSpecification', 'dayOfWeek': 'Sunday', 'opens': '08:00', 'closes': '12:30' },
+        { '@type': 'OpeningHoursSpecification', 'dayOfWeek': 'Wednesday', 'opens': '17:30', 'closes': '19:00' }
+      ],
+      'contactPoint': {
+        '@type': 'ContactPoint',
+        'telephone': '+254700000000',
+        'contactType': 'customer service',
+        'availableLanguage': ['English', 'Swahili']
+      }
     }
   ]
 };
+const RATE_LIMIT_KEY = 'aic_contact_last_submission';
+const COOLDOWN_MS = 60_000;
 
 const Contact = () => {
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
+  const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
 
-  const { executeRecaptcha } = useGoogleReCaptcha();
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: '',
-  });
-  const [status, setStatus] = useState<string | null>(null);
-
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
 
-    if (!executeRecaptcha) {
-      console.warn('Execute recaptcha not yet available');
+    if (!recaptchaToken) {
+      setErrorMessage('Please verify that you are not a robot.');
       return;
     }
 
-    // Validation
-    try {
-      contactSchema.parse(formData);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        setStatus(`Validation Error: ${error.errors[0].message}`);
-        return;
-      }
+    if (!formData.name || !formData.email || !formData.message) {
+      setErrorMessage('Please fill in all required fields.');
+      return;
     }
 
-    setStatus('Verifying...');
-    try {
-      const token = await executeRecaptcha('contact_form');
-      if (!token) {
-        setStatus('Security check failed. Please try again.');
-        return;
-      }
+    if (!checkRateLimit(RATE_LIMIT_KEY, COOLDOWN_MS)) {
+      setErrorMessage('Please wait 60 seconds before sending another message.');
+      return;
+    }
 
-      setStatus('Sending...');
-      await sendMessage(formData);
-      setStatus('Message sent! We will get back to you soon.');
+    setStatus('submitting');
+    try {
+      await addDoc(collection(db, 'contact_messages'), {
+        ...formData,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+      
+      setStatus('success');
       setFormData({ name: '', email: '', subject: '', message: '' });
-    } catch (error) {
-      console.error('Submission error:', error);
-      setStatus('Error sending message. Please try again.');
+      recaptchaRef.current?.reset();
+      setRecaptchaToken(null);
+      recordSubmission(RATE_LIMIT_KEY);
+      
+      // Reset success message after 5 seconds
+      setTimeout(() => setStatus('idle'), 5000);
+    } catch (err: any) {
+      console.error('Error submitting form:', err);
+      setStatus('error');
+      setErrorMessage(err.message || 'Failed to send message. Please try again.');
     }
-  }, [executeRecaptcha, formData]);
-
-  if (loadError) return <div className="pt-32 text-center text-red-500 font-bold">Error loading maps. Please refresh.</div>;
+  };
 
   return (
-    <div className="min-h-screen bg-brand-cream pt-24 md:pt-32 pb-20 px-4 xs:px-6 lg:px-8 font-sans">
-      <Helmet>
-        <title>Contact Us - We Are Here for You | AIC Happy Valley Thika</title>
-        <meta name="description" content="Get in touch with AIC Happy Valley. Whether you have a prayer request, a question about our services, or want to visit us in Thika, we'd love to hear from you." />
-        <meta name="keywords" content="Contact AIC Happy Valley, Church Location Thika, Prayer Request Thika, Email AIC Happy Valley, Church Phone Number Thika" />
-        <link rel="canonical" href="https://aic-happy-valley.web.app/contact" />
-      </Helmet>
-      <div className="max-w-7xl mx-auto">
-
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12 md:mb-16"
-        >
-          <span className="inline-block px-4 py-1.5 bg-brand-sage/10 text-brand-sage text-[10px] xs:text-xs font-bold rounded-full uppercase tracking-[0.2em] border border-brand-sage/20 mb-4">
-            Get In Touch
-          </span>
-          <h1 className="text-3xl xs:text-4xl md:text-6xl font-black text-brand-darkGrey tracking-tight mb-6 leading-tight">
-            We Are Here <span className="text-brand-sage italic">For You</span>.
+    <div className="bg-background min-h-screen pb-20">
+      <SEO
+        title="Contact Us"
+        description="Get in touch with AIC Happy Valley Thika. We'd love to hear from you — visit us on Sundays at 8:00 AM or 10:30 AM, or send us a message."
+        url="/contact"
+        keywords="contact AIC Happy Valley, church address Thika, Happy Valley church location, church phone Kenya"
+        schema={CONTACT_SCHEMA}
+      />
+      
+      {/* Hero */}
+      <section className="bg-brand-sage/10 py-20 px-4">
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-4xl md:text-6xl font-black text-brand-grey mb-6 tracking-tight">
+            Get in <span className="text-brand-sage">Touch</span>
           </h1>
-          <p className="text-brand-darkGrey/60 text-base xs:text-xl max-w-2xl mx-auto leading-relaxed font-medium">
-            Whether you have a prayer request, a question about our ministries, or just want to say hello, we'd love to hear from you.
+          <p className="text-lg text-muted-foreground font-medium max-w-2xl mx-auto">
+            Whether you have a question, a prayer request, or want to learn more about our church family, we're here for you.
           </p>
-        </motion.div>
+        </div>
+      </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 xs:gap-12 items-start">
-          
-          {/* Contact Information & Map */}
-          <div className="lg:col-span-5 space-y-6 xs:space-y-8">
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white p-6 xs:p-8 md:p-10 rounded-[2rem] xs:rounded-[2.5rem] shadow-2xl shadow-brand-darkGrey/5 border border-brand-sage/10 relative overflow-hidden group"
-            >
-              <div className="absolute top-0 right-0 w-24 h-24 xs:w-32 xs:h-32 bg-brand-sage/5 rounded-bl-[80px] xs:rounded-bl-[100px] transition-transform group-hover:scale-110"></div>
-              
-              <h2 className="text-xl xs:text-2xl font-black text-brand-darkGrey mb-8 relative z-10">Contact Information</h2>
-              
-              <div className="space-y-6 relative z-10">
-                <div className="flex items-start gap-4 xs:gap-5">
-                  <div className="w-10 h-10 xs:w-12 xs:h-12 bg-brand-sage/10 text-brand-sage rounded-2xl flex items-center justify-center shrink-0">
-                    <MapPin size={20} className="xs:size-[24px]" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-1">Our Location</p>
-                    <p className="text-brand-darkGrey font-bold text-sm xs:text-base leading-relaxed">Happy Valley Area, Garissa Road, Thika, Kenya</p>
-                  </div>
+      <section className="max-w-7xl mx-auto px-4 mt-[-40px]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          {/* Info Cards */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-white p-8 rounded-3xl border border-border shadow-xl space-y-8">
+              <div className="flex items-start gap-5">
+                <div className="w-12 h-12 rounded-2xl bg-brand-sage/20 text-brand-sage flex items-center justify-center shrink-0">
+                  <MapPin size={24} />
                 </div>
-
-                <div className="flex items-start gap-4 xs:gap-5">
-                  <div className="w-10 h-10 xs:w-12 xs:h-12 bg-brand-sage/10 text-brand-sage rounded-2xl flex items-center justify-center shrink-0">
-                    <Mail size={20} className="xs:size-[24px]" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-1">Email Us</p>
-                    <p className="text-brand-darkGrey font-bold text-sm xs:text-base break-all">aichappyvalley@gmail.com</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4 xs:gap-5">
-                  <div className="w-10 h-10 xs:w-12 xs:h-12 bg-brand-sage/10 text-brand-sage rounded-2xl flex items-center justify-center shrink-0">
-                    <Phone size={20} className="xs:size-[24px]" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-1">Call Us</p>
-                    <p className="text-brand-darkGrey font-bold text-sm xs:text-base">+254 712 822 424</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4 xs:gap-5">
-                  <div className="w-10 h-10 xs:w-12 xs:h-12 bg-brand-sage/10 text-brand-sage rounded-2xl flex items-center justify-center shrink-0">
-                    <Clock size={20} className="xs:size-[24px]" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-1">Service Times</p>
-                    <p className="text-brand-darkGrey font-bold text-sm xs:text-base">Sundays: 8:00 AM & 10:30 AM</p>
-                  </div>
+                <div>
+                  <h3 className="font-bold text-lg text-brand-grey">Visit Us</h3>
+                  <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                    Happy Valley, Thika Town<br />
+                    P.O. Box 123-01000<br />
+                    Thika, Kenya
+                  </p>
                 </div>
               </div>
-            </motion.div>
 
-            {/* Map Placeholder */}
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }}
-               animate={{ opacity: 1, scale: 1 }}
-               className="h-64 xs:h-80 bg-brand-darkGrey rounded-[2rem] xs:rounded-[2.5rem] overflow-hidden shadow-2xl border-4 xs:border-8 border-white relative group"
-            >
-              {!isLoaded ? (
-                <div className="w-full h-full flex items-center justify-center bg-brand-darkGrey text-white/20">
-                  <MapPin size={40} className="animate-bounce" />
+              <div className="flex items-start gap-5">
+                <div className="w-12 h-12 rounded-2xl bg-brand-sky/20 text-brand-sky flex items-center justify-center shrink-0">
+                  <Mail size={24} />
                 </div>
-              ) : (
-                <GoogleMap
-                  mapContainerStyle={mapContainerStyle}
-                  center={center}
-                  zoom={15}
-                  options={options as any}
-                >
-                  <Marker position={center} />
-                </GoogleMap>
-              )}
-              <div className="absolute bottom-4 left-4 right-4 xs:bottom-6 xs:left-6 xs:right-6">
-                <a 
-                  href="https://www.google.com/maps/search/?api=1&query=-1.042358,37.108502" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="w-full bg-white/90 backdrop-blur-md text-brand-darkGrey font-black py-3 xs:py-4 rounded-xl xs:rounded-2xl flex items-center justify-center gap-2 hover:bg-brand-sage hover:text-white transition-all shadow-xl text-xs xs:text-base"
-                >
-                   <ExternalLink size={16} className="xs:size-[18px]" />
-                   Open in Google Maps
-                </a>
+                <div>
+                  <h3 className="font-bold text-lg text-brand-grey">Email Us</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">info@aichappyvalley.org</p>
+                  <p className="text-muted-foreground text-sm">office@aichappyvalley.org</p>
+                </div>
               </div>
-            </motion.div>
+
+              <div className="flex items-start gap-5">
+                <div className="w-12 h-12 rounded-2xl bg-brand-gold/20 text-brand-gold flex items-center justify-center shrink-0">
+                  <Phone size={24} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg text-brand-grey">Call Us</h3>
+                  <p className="text-muted-foreground mt-1 text-sm">+254 700 000 000</p>
+                  <p className="text-muted-foreground text-sm">+254 711 111 111</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Service Times */}
+            <div className="bg-brand-grey p-8 rounded-3xl text-white shadow-xl">
+              <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <MessageSquare size={20} className="text-brand-sage" />
+                Service Times
+              </h3>
+              <ul className="space-y-3 text-sm text-slate-300">
+                <li className="flex justify-between border-b border-white/10 pb-2">
+                  <span>English Service</span>
+                  <span className="font-bold text-white">8:00 AM</span>
+                </li>
+                <li className="flex justify-between border-b border-white/10 pb-2">
+                  <span>Kiswahili Service</span>
+                  <span className="font-bold text-white">10:30 AM</span>
+                </li>
+                <li className="flex justify-between border-b border-white/10 pb-2">
+                  <span>Mid-week Prayer</span>
+                  <span className="font-bold text-white">Wed 5:30 PM</span>
+                </li>
+              </ul>
+            </div>
           </div>
 
-          {/* Contact Form */}
+          {/* Form */}
           <div className="lg:col-span-7">
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white p-6 xs:p-10 md:p-14 rounded-[2rem] xs:rounded-[3rem] shadow-2xl shadow-brand-darkGrey/5 border border-brand-sage/10 relative"
-            >
-              <h2 className="text-2xl xs:text-3xl font-black text-brand-darkGrey mb-8">Send a Message</h2>
+            <div className="bg-white p-8 md:p-12 rounded-3xl border border-border shadow-2xl h-full font-sans">
+              <h2 className="text-2xl font-bold text-brand-grey mb-8">Send us a Message</h2>
               
-              <form onSubmit={handleSubmit} className="space-y-5 xs:space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 xs:gap-6">
-                  <div>
-                    <label className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-2 block">Your Name</label>
-                    <input 
-                      required
-                      type="text" 
-                      value={formData.name}
-                      onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      placeholder="John Doe"
-                      className="w-full bg-brand-cream/50 border border-brand-sage/20 rounded-xl xs:rounded-2xl px-6 py-4 text-brand-darkGrey font-medium focus:outline-none focus:ring-2 focus:ring-brand-sage transition-all text-sm xs:text-base"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-2 block">Email Address</label>
-                    <input 
-                      required
-                      type="email" 
-                      value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      placeholder="john@example.com"
-                      className="w-full bg-brand-cream/50 border border-brand-sage/20 rounded-xl xs:rounded-2xl px-6 py-4 text-brand-darkGrey font-medium focus:outline-none focus:ring-2 focus:ring-brand-sage transition-all text-sm xs:text-base"
-                    />
-                  </div>
-                </div>
 
-                <div>
-                  <label className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-2 block">Subject</label>
-                  <input 
-                    required
-                    type="text" 
-                    value={formData.subject}
-                    onChange={(e) => setFormData({...formData, subject: e.target.value})}
-                    placeholder="Prayer Request / Inquiry"
-                    className="w-full bg-brand-cream/50 border border-brand-sage/20 rounded-xl xs:rounded-2xl px-6 py-4 text-brand-darkGrey font-medium focus:outline-none focus:ring-2 focus:ring-brand-sage transition-all text-sm xs:text-base"
-                  />
-                </div>
 
-                <div>
-                  <label className="text-[10px] font-black text-brand-darkGrey/40 uppercase tracking-widest mb-2 block">Your Message</label>
-                  <textarea 
-                    required
-                    rows={6}
-                    value={formData.message}
-                    onChange={(e) => setFormData({...formData, message: e.target.value})}
-                    placeholder="How can we help you today?"
-                    className="w-full bg-brand-cream/50 border border-brand-sage/20 rounded-xl xs:rounded-2xl px-6 py-4 text-brand-darkGrey font-medium focus:outline-none focus:ring-2 focus:ring-brand-sage transition-all resize-none text-sm xs:text-base"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-4 pt-4">
-                  <button 
-                    type="submit" 
-                    disabled={status === 'Sending...' || status === 'Verifying...'}
-                    className="w-full bg-brand-darkGrey text-white font-black py-4 xs:py-5 rounded-[1.5rem] xs:rounded-[2rem] shadow-xl hover:bg-brand-sage hover:text-brand-darkGrey transition-all flex items-center justify-center gap-3 disabled:opacity-50 group text-sm xs:text-base active:scale-[0.98] transition-transform"
+              <AnimatePresence>
+                {status === 'success' && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    className="mb-8 p-8 bg-brand-sage/10 border border-brand-sage/20 rounded-3xl flex flex-col items-center text-center gap-4 text-brand-grey shadow-lg shadow-brand-sage/5"
                   >
-                    <Send size={18} className="xs:size-[20px] group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                    {status === 'Sending...' ? 'Sending Message...' : status === 'Verifying...' ? 'Security Check...' : 'Send Message'}
-                  </button>
-                  
-                  {status && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className={`p-4 rounded-xl xs:rounded-2xl flex items-center gap-3 text-xs xs:text-sm font-bold ${
-                        status.includes('sent') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                      }`}
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ 
+                        type: "spring",
+                        stiffness: 260,
+                        damping: 20,
+                        delay: 0.1 
+                      }}
+                      className="w-16 h-16 rounded-full bg-brand-sage text-white flex items-center justify-center shadow-lg shadow-brand-sage/20"
                     >
-                      <div className="shrink-0">
-                        {status.includes('sent') ? <CheckCircle2 size={18} /> : 
-                         status.includes('Validation') ? <ShieldAlert size={18} /> : <ShieldCheck size={18} />}
-                      </div>
-                      <span className="leading-tight">{status}</span>
+                      <CheckCircle size={32} />
                     </motion.div>
+                    <div>
+                      <h4 className="font-black text-xl uppercase tracking-tighter">Message Received</h4>
+                      <p className="text-sm mt-2 font-medium opacity-80 leading-relaxed">
+                        Thank you for reaching out to your church family. <br />
+                        We've received your request and will get back to you soon.
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {errorMessage && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-3 text-red-800">
+                  <AlertCircle className="shrink-0 mt-0.5" size={18} />
+                  <p className="text-sm font-medium">{errorMessage}</p>
+                </div>
+              )}
+
+              <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="c-name">Full Name <span className="text-red-500">*</span></Label>
+                    <Input 
+                      id="c-name" 
+                      required
+                      value={formData.name}
+                      onChange={e => setFormData({...formData, name: e.target.value})}
+                      placeholder="John Doe" 
+                      className="h-12 rounded-xl" 
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="c-email">Email Address <span className="text-red-500">*</span></Label>
+                    <Input 
+                      id="c-email" 
+                      type="email" 
+                      required
+                      value={formData.email}
+                      onChange={e => setFormData({...formData, email: e.target.value})}
+                      placeholder="john@example.com" 
+                      className="h-12 rounded-xl" 
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="c-subject">Subject</Label>
+                  <Input 
+                    id="c-subject" 
+                    value={formData.subject}
+                    onChange={e => setFormData({...formData, subject: e.target.value})}
+                    placeholder="How can we help?" 
+                    className="h-12 rounded-xl" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="c-msg">Message <span className="text-red-500">*</span></Label>
+                  <textarea 
+                    id="c-msg" 
+                    rows={6} 
+                    required
+                    value={formData.message}
+                    onChange={e => setFormData({...formData, message: e.target.value})}
+                    className="w-full border border-border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-sage/50 transition-all font-sans"
+                    placeholder="Your message here..."
+                  />
+                </div>
+
+                <div className="pt-2 min-h-[78px]">
+                  {import.meta.env.VITE_RECAPTCHA_SITE_KEY ? (
+                    <ReCAPTCHA
+                      ref={recaptchaRef}
+                      sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+                      onChange={(token) => setRecaptchaToken(token)}
+                    />
+                  ) : (
+                    <div className="text-sm text-yellow-600 bg-yellow-50 p-4 rounded-xl border border-yellow-100 flex items-center gap-2">
+                      <AlertCircle size={18} />
+                      Captcha configuration missing.
+                    </div>
                   )}
                 </div>
+
+                <Button 
+                  type="submit"
+                  disabled={status === 'submitting'}
+                  className="w-full h-14 rounded-2xl text-lg font-bold bg-brand-sage hover:scale-[1.02] transition-transform text-brand-grey shadow-lg shadow-brand-sage/10 disabled:opacity-70 disabled:hover:scale-100"
+                >
+                  {status === 'submitting' ? (
+                    <><Loader2 className="animate-spin mr-2" size={20} /> Sending...</>
+                  ) : (
+                    <><Send className="mr-2 w-5 h-5" /> Send Message</>
+                  )}
+                </Button>
               </form>
-            </motion.div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

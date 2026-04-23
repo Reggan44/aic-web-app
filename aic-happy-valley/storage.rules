@@ -16,8 +16,8 @@ service firebase.storage {
       allow write: if isAdmin();
     }
 
-    // Sermons & Media: Public Read, Admin Write
-    match /media/{allPaths=**} {
+    // Ministries Media: Public Read, Admin Write
+    match /ministries/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
